@@ -47,6 +47,6 @@ private:
     // Compute per-cell average color and luminance from a ROI
     void sampleCell(const cv::Mat& gray, const cv::Mat& color,
                     int row, int col,
-                    int cell_w, int cell_h,
+                    int rows, int cols,
                     uint8_t& out_luma, cv::Scalar& out_color) const;
 };

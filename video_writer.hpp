@@ -9,6 +9,8 @@ struct VideoWriterOptions {
     double fps = 30.0;
     // OpenCV fourcc code string, e.g. "mp4v", "avc1", "XVID"
     std::string fourcc = "mp4v";
+    // Print sizing diagnostics to verify fullscreen writes.
+    bool debug_fullscreen = false;
 };
 
 class VideoWriter {

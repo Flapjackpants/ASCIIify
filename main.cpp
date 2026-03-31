@@ -32,6 +32,7 @@ struct Config {
     double fps_override  = 0.0;  // 0 = match source
     int    width         = 0;
     int    height        = 0;
+    bool   debug_fullscreen = false;
 
     // Misc
     bool verbose         = false;
@@ -62,6 +63,7 @@ void printUsage(const char* prog) {
         "  --fps <f>          Override output FPS (default: match source)\n"
         "  --width <n>        Output width in pixels (default: auto)\n"
         "  --height <n>       Output height in pixels (default: auto)\n"
+        "  --debug-fullscreen Print frame sizing diagnostics during write\n"
         "\n"
         "Misc:\n"
         "  --max-frames <n>   Process only first N frames (useful for testing)\n"
@@ -128,6 +130,8 @@ Config parseArgs(int argc, char** argv) {
             cfg.width = std::stoi(nextArg());
         } else if (arg == "--height") {
             cfg.height = std::stoi(nextArg());
+        } else if (arg == "--debug-fullscreen") {
+            cfg.debug_fullscreen = true;
         } else if (arg == "--max-frames") {
             cfg.max_frames = std::stoi(nextArg());
         } else if (arg == "-v" || arg == "--verbose") {
@@ -269,6 +273,7 @@ int main(int argc, char** argv) {
         wr_opts.fourcc = cfg.fourcc;
         wr_opts.width  = cfg.width;
         wr_opts.height = cfg.height;
+        wr_opts.debug_fullscreen = cfg.debug_fullscreen;
 
         if (cfg.cols_max && (cfg.width > 0 || cfg.height > 0)) {
             throw std::invalid_argument("--cols-max cannot be combined with --width/--height");

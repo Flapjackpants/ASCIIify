@@ -34,6 +34,12 @@ void VideoWriter::initialize(int width, int height) {
     opts_.width  = width;
     opts_.height = height;
     initialized_ = true;
+    if (opts_.debug_fullscreen) {
+        std::cout << "[VideoWriter][debug] Initialized encoder at "
+                  << opts_.width << "x" << opts_.height
+                  << " fps=" << opts_.fps
+                  << " codec=" << opts_.fourcc << "\n";
+    }
 }
 
 void VideoWriter::writeFrame(const AsciiFrame& ascii_frame) {
@@ -44,17 +50,39 @@ void VideoWriter::writeFrame(const AsciiFrame& ascii_frame) {
     }
 
     if (!initialized_) {
-        initialize(img.cols, img.rows);
-    } else if (img.cols != opts_.width || img.rows != opts_.height) {
-        // Resize to match the initialized dimensions
-        cv::Mat resized;
-        cv::resize(img, resized, cv::Size(opts_.width, opts_.height));
-        writer_.write(resized);
-        ++frames_written_;
-        return;
+        // Respect explicit user target size when provided; otherwise infer from first frame.
+        const int init_w = (opts_.width  > 0) ? opts_.width  : img.cols;
+        const int init_h = (opts_.height > 0) ? opts_.height : img.rows;
+        initialize(init_w, init_h);
     }
 
-    writer_.write(img);
+    // Always normalize to encoder size before writing to avoid backend-dependent
+    // top-left anchoring/padding when frame sizes disagree.
+    cv::Mat out_frame;
+    bool resized = false;
+    if (img.cols != opts_.width || img.rows != opts_.height) {
+        cv::resize(img, out_frame, cv::Size(opts_.width, opts_.height), 0.0, 0.0, cv::INTER_AREA);
+        resized = true;
+    } else {
+        out_frame = img;
+    }
+
+    if (opts_.debug_fullscreen) {
+        const bool log_this_frame = (frames_written_ < 5) || (frames_written_ % 120 == 0);
+        if (log_this_frame) {
+            std::cout << "[VideoWriter][debug] frame=" << ascii_frame.index
+                      << " in=" << img.cols << "x" << img.rows
+                      << " target=" << opts_.width << "x" << opts_.height
+                      << " out=" << out_frame.cols << "x" << out_frame.rows
+                      << " resized=" << (resized ? "yes" : "no")
+                      << "\n";
+        }
+        if (out_frame.cols != opts_.width || out_frame.rows != opts_.height) {
+            throw std::runtime_error("Debug fullscreen check failed: output frame does not match encoder size");
+        }
+    }
+
+    writer_.write(out_frame);
     ++frames_written_;
 }
 

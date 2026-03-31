@@ -33,22 +33,21 @@ char AsciiConverter::luminanceToChar(uint8_t luma) const {
 
 void AsciiConverter::sampleCell(const cv::Mat& gray, const cv::Mat& color,
                                  int row, int col,
-                                 int cell_w, int cell_h,
+                                 int rows, int cols,
                                  uint8_t& out_luma, cv::Scalar& out_color) const
 {
-    int x = col * cell_w;
-    int y = row * cell_h;
+    // Compute cell bounds proportionally to guarantee full source coverage with no
+    // out-of-bounds tail columns/rows.
+    const int x0 = (col * gray.cols) / cols;
+    const int x1 = ((col + 1) * gray.cols) / cols;
+    const int y0 = (row * gray.rows) / rows;
+    const int y1 = ((row + 1) * gray.rows) / rows;
+    const int x = std::max(0, std::min(x0, gray.cols - 1));
+    const int y = std::max(0, std::min(y0, gray.rows - 1));
+    const int w = std::max(1, x1 - x0);
+    const int h = std::max(1, y1 - y0);
 
-    // Clamp to image bounds
-    int w = std::min(cell_w, gray.cols - x);
-    int h = std::min(cell_h, gray.rows - y);
-    if (w <= 0 || h <= 0) {
-        out_luma  = 0;
-        out_color = opts_.fg_color;
-        return;
-    }
-
-    cv::Rect roi(x, y, w, h);
+    cv::Rect roi(x, y, std::min(w, gray.cols - x), std::min(h, gray.rows - y));
     cv::Scalar mean_luma  = cv::mean(gray(roi));
     out_luma = static_cast<uint8_t>(mean_luma[0]);
 
@@ -86,10 +85,6 @@ AsciiFrame AsciiConverter::convert(const Frame& frame) const {
         1,
         static_cast<int>(std::lround(static_cast<double>(cols) * source_aspect / cell_aspect))
     );
-
-    // Sampling grid dimensions in source image (ceil-div so right/bottom edges are covered).
-    const int cell_w = std::max(1, (src_w + cols - 1) / cols);
-    const int cell_h = std::max(1, (src_h + rows - 1) / rows);
 
     const int out_w = cols * char_px_w;
     const int out_h = rows * char_px_h;
@@ -135,7 +130,7 @@ AsciiFrame AsciiConverter::convert(const Frame& frame) const {
         for (int c = 0; c < cols; c++) {
             uint8_t luma;
             cv::Scalar cell_color;
-            sampleCell(gray, color_bgr, r, c, cell_w, cell_h, luma, cell_color);
+            sampleCell(gray, color_bgr, r, c, rows, cols, luma, cell_color);
 
             char ch = luminanceToChar(luma);
             row_str += ch;
