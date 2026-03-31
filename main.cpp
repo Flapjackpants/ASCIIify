@@ -22,6 +22,9 @@ struct Config {
     double font_scale    = 0.4;
     bool   use_color     = true;
     bool   invert        = false;
+    double saturation_boost = 1.0;
+    double brighten = 1.0;
+    double mono_luma_scale = 0.5;
     std::string char_ramp = ""; // empty = use default
 
     // Output video options
@@ -49,6 +52,9 @@ void printUsage(const char* prog) {
         "  --font-scale <f>   Font scale for rendering (default: 0.4)\n"
         "  --no-color         Render in white-on-black instead of source colors\n"
         "  --invert           Invert luminance mapping (dark chars on light bg)\n"
+        "  --saturation <f>   HSV saturation scale before convert (default: 1.5; use 1 for none)\n"
+        "  --brighten <f>     Luma scale for color mode (default: 1.0; >1 brighter)\n"
+        "  --mono-darken <f>  Luma scale for --no-color (default: 0.8; 1 disables darkening)\n"
         "  --ramp <string>    Custom character density ramp (darkest to brightest)\n"
         "\n"
         "Output options:\n"
@@ -103,6 +109,12 @@ Config parseArgs(int argc, char** argv) {
             cfg.use_color = false;
         } else if (arg == "--invert") {
             cfg.invert = true;
+        } else if (arg == "--saturation") {
+            cfg.saturation_boost = std::stod(nextArg());
+        } else if (arg == "--brighten") {
+            cfg.brighten = std::stod(nextArg());
+        } else if (arg == "--mono-darken") {
+            cfg.mono_luma_scale = std::stod(nextArg());
         } else if (arg == "--ramp") {
             cfg.char_ramp = nextArg();
         } else if (arg == "--fourcc") {
@@ -246,6 +258,9 @@ int main(int argc, char** argv) {
         asc_opts.font_scale     = cfg.font_scale;
         asc_opts.use_color      = cfg.use_color;
         asc_opts.invert         = cfg.invert;
+        asc_opts.saturation_boost = cfg.saturation_boost;
+        asc_opts.color_luma_scale = cfg.brighten;
+        asc_opts.mono_luma_scale = cfg.mono_luma_scale;
         if (!cfg.char_ramp.empty()) asc_opts.char_ramp = cfg.char_ramp;
 
         // ── Build writer ────────────────────────────────────────────────────

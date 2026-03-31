@@ -15,10 +15,18 @@ struct AsciiConverterOptions {
     cv::Scalar fg_color = cv::Scalar(255, 255, 255);
     // If true, color each character with the source pixel color
     bool use_color = true;
-    // Character density ramp (darkest → brightest)
-    std::string char_ramp = " .`-_':,;^=+/\"|)\\<>)iv%xclrs{*}I?!][1taeo7zjLunT#JCwfy325Fp6mqSghVd4EgXPGZbYkOA8U$KHDBWNMR0Q@";
+    // Darkest → brightest; leading spaces widen the “blank” dark range (color and mono).
+    std::string char_ramp =
+        "            "
+        ".`-_':,;^=+/\"|)\\<>)iv%xclrs{*}I?!][1taeo7zjLunT#JCwfy325Fp6mqSghVd4EgXPGZbYkOA8U$KHDBWNMR0Q@";
     // If true, invert luminance mapping (light bg, dark chars)
     bool invert = false;
+    // HSV S-channel multiplier before sampling (>1 = more vivid; 1 = unchanged)
+    double saturation_boost = 1.5;
+    // Applied only when use_color=true; >1 brightens, <1 darkens color output/luma.
+    double color_luma_scale = 1.0;
+    // Applied only when use_color=false; <1 darkens monochrome source luma.
+    double mono_luma_scale = 0.8;
 };
 
 class AsciiConverter {

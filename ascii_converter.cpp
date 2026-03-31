@@ -2,6 +2,7 @@
 #include <opencv2/opencv.hpp>
 #include <cmath>
 #include <stdexcept>
+#include <vector>
 
 AsciiConverter::AsciiConverter(const Options& opts)
     : opts_(opts)
@@ -11,6 +12,15 @@ AsciiConverter::AsciiConverter(const Options& opts)
     }
     if (opts_.cols <= 0) {
         throw std::invalid_argument("cols must be > 0");
+    }
+    if (opts_.saturation_boost <= 0.0) {
+        throw std::invalid_argument("saturation_boost must be > 0");
+    }
+    if (opts_.color_luma_scale <= 0.0) {
+        throw std::invalid_argument("color_luma_scale must be > 0");
+    }
+    if (opts_.mono_luma_scale <= 0.0) {
+        throw std::invalid_argument("mono_luma_scale must be > 0");
     }
 }
 
@@ -84,10 +94,31 @@ AsciiFrame AsciiConverter::convert(const Frame& frame) const {
     const int out_w = cols * char_px_w;
     const int out_h = rows * char_px_h;
 
-    // Prepare grayscale and color versions of source
-    cv::Mat gray, color_bgr;
-    cv::cvtColor(frame.image, gray, cv::COLOR_BGR2GRAY);
-    color_bgr = frame.image; // already BGR
+    cv::Mat color_bgr;
+    if (opts_.saturation_boost > 1.0 + 1e-9) {
+        cv::Mat hsv;
+        cv::cvtColor(frame.image, hsv, cv::COLOR_BGR2HSV);
+        std::vector<cv::Mat> ch;
+        cv::split(hsv, ch);
+        cv::Mat s32;
+        ch[1].convertTo(s32, CV_32F, opts_.saturation_boost);
+        cv::min(s32, 255.0, s32);
+        cv::max(s32, 0.0, s32);
+        s32.convertTo(ch[1], CV_8U);
+        cv::merge(ch, hsv);
+        cv::cvtColor(hsv, color_bgr, cv::COLOR_HSV2BGR);
+    } else {
+        color_bgr = frame.image;
+    }
+    if (opts_.use_color && std::abs(opts_.color_luma_scale - 1.0) > 1e-9) {
+        color_bgr.convertTo(color_bgr, CV_8U, opts_.color_luma_scale, 0.0);
+    }
+
+    cv::Mat gray;
+    cv::cvtColor(color_bgr, gray, cv::COLOR_BGR2GRAY);
+    if (!opts_.use_color && std::abs(opts_.mono_luma_scale - 1.0) > 1e-9) {
+        gray.convertTo(gray, CV_8U, opts_.mono_luma_scale, 0.0);
+    }
 
     // Output image
     cv::Mat canvas(out_h, out_w, CV_8UC3, opts_.bg_color);

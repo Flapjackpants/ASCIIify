@@ -83,10 +83,13 @@ Required:
 
 ASCII options:
   --cols <n>         Character columns in ASCII grid (default: 120)
-  --cols-max         Character colums in ASCII grid are as large as possible for MPEG-4 to handle
+  --cols-max         Auto-pick maximum codec-safe output columns
   --font-scale <f>   Font scale for rendering (default: 0.4)
   --no-color         Render in white-on-black instead of source colors
   --invert           Invert luminance mapping (dark chars on light bg)
+  --saturation <f>   HSV saturation scale before convert (default: 1.0, none)
+  --brighten <f>     Luma scale for color mode (default: 1.0; >1 brighter)
+  --mono-darken <f>  Luma scale for --no-color (default: 0.5; 1 disables darkening)
   --ramp <string>    Custom character density ramp (darkest to brightest)
 
 Output options:
@@ -107,8 +110,20 @@ Misc:
 # Basic conversion (colored ASCII)
 ./video_ascii -i input.mp4 -o ascii_out.mp4
 
+# Auto-pick the highest safe column count for the selected codec
+./video_ascii -i input.mp4 -o out.mp4 --cols-max
+
 # Classic white-on-black, 80 columns
 ./video_ascii -i input.mp4 -o out.mp4 --cols 80 --no-color
+
+# Increase color vividness for better readability
+./video_ascii -i input.mp4 -o out.mp4 --saturation 1.8
+
+# Brighten color-mode output without changing saturation
+./video_ascii -i input.mp4 -o out.mp4 --brighten 1.2
+
+# Monochrome mode with stronger darkening
+./video_ascii -i input.mp4 -o out.mp4 --no-color --mono-darken 0.7
 
 # Dark-on-light (inverted) with custom ramp
 ./video_ascii -i input.mp4 -o out.mp4 --invert --ramp " .-+*#@"
@@ -125,7 +140,7 @@ Misc:
 1. **Grid sizing** — The frame is divided into `cols` columns. Row count is derived from `cols` and the character aspect ratio (~2:1 height:width for monospace fonts).
 2. **Cell sampling** — For each character cell, the average luminance (from grayscale) and average BGR color are computed.
 3. **Character mapping** — Luminance is mapped linearly onto a density ramp string. Darker cells get sparse characters (space, `.`), brighter ones get dense characters (`#`, `@`).
-4. **Rendering** — Each character is drawn onto a blank canvas using `cv::putText`. If `--use-color` is on (default), each character is tinted with the source cell's average color.
+4. **Rendering** — Each character is drawn onto a blank canvas using `cv::putText`. By default, each character is tinted with the source cell's average color; use `--no-color` for white-on-black mono output.
 
 ## Potential Extensions
 
