@@ -83,6 +83,7 @@ Required:
 
 ASCII options:
   --cols <n>         Character columns in ASCII grid (default: 120)
+  --cols-max         Character colums in ASCII grid are as large as possible for MPEG-4 to handle
   --font-scale <f>   Font scale for rendering (default: 0.4)
   --no-color         Render in white-on-black instead of source colors
   --invert           Invert luminance mapping (dark chars on light bg)

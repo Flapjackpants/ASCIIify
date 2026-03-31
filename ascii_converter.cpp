@@ -57,21 +57,29 @@ AsciiFrame AsciiConverter::convert(const Frame& frame) const {
     const int src_w = frame.image.cols;
     const int src_h = frame.image.rows;
 
-    // Determine grid dimensions
-    // ASCII characters are roughly 2x taller than wide, so rows ≈ cols/2
-    const int cols     = opts_.cols;
-    const int cell_w   = std::max(1, src_w / cols);
-    // Correct for character aspect ratio (~0.5 wide/tall for monospace fonts)
-    const int cell_h   = std::max(1, static_cast<int>(cell_w * 2.0));
-    const int rows     = src_h / cell_h;
+    const int cols = opts_.cols;
 
-    // Precompute output canvas size
-    // We'll use a fixed pixel size per character cell based on font metrics
-    // OpenCV FONT_HERSHEY_MONO at scale 0.4 → ~8px wide, ~10px tall per char
-    int char_px_w = static_cast<int>(8.0  * opts_.font_scale / 0.4);
-    int char_px_h = static_cast<int>(12.0 * opts_.font_scale / 0.4);
-    if (char_px_w < 1) char_px_w = 1;
-    if (char_px_h < 1) char_px_h = 1;
+    // Derive character cell geometry from actual OpenCV text metrics instead of
+    // hardcoded constants to preserve requested column count and frame aspect.
+    constexpr int font_face = cv::FONT_HERSHEY_SIMPLEX;
+    int baseline = 0;
+    const cv::Size glyph_size = cv::getTextSize(
+        "M", font_face, opts_.font_scale, opts_.font_thickness, &baseline
+    );
+    const int char_px_w = std::max(1, glyph_size.width + 1);
+    const int char_px_h = std::max(1, glyph_size.height + baseline + 1);
+
+    // Keep output aspect ratio close to source after accounting for glyph aspect.
+    const double source_aspect = static_cast<double>(src_h) / static_cast<double>(src_w);
+    const double cell_aspect   = static_cast<double>(char_px_h) / static_cast<double>(char_px_w);
+    const int rows = std::max(
+        1,
+        static_cast<int>(std::lround(static_cast<double>(cols) * source_aspect / cell_aspect))
+    );
+
+    // Sampling grid dimensions in source image (ceil-div so right/bottom edges are covered).
+    const int cell_w = std::max(1, (src_w + cols - 1) / cols);
+    const int cell_h = std::max(1, (src_h + rows - 1) / rows);
 
     const int out_w = cols * char_px_w;
     const int out_h = rows * char_px_h;
@@ -108,7 +116,7 @@ AsciiFrame AsciiConverter::convert(const Frame& frame) const {
 
             cv::putText(canvas, ch_str,
                         cv::Point(px, py),
-                        cv::FONT_HERSHEY_SIMPLEX,
+                        font_face,
                         opts_.font_scale,
                         cell_color,
                         opts_.font_thickness,

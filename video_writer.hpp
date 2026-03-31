@@ -2,16 +2,18 @@
 #include "frame.hpp"
 #include <string>
 
+struct VideoWriterOptions {
+    // Output resolution; if either is 0 it will be inferred from the first frame
+    int width  = 0;
+    int height = 0;
+    double fps = 30.0;
+    // OpenCV fourcc code string, e.g. "mp4v", "avc1", "XVID"
+    std::string fourcc = "mp4v";
+};
+
 class VideoWriter {
 public:
-    struct Options {
-        // Output resolution; if either is 0 it will be inferred from the first frame
-        int width  = 0;
-        int height = 0;
-        double fps = 30.0;
-        // OpenCV fourcc code string, e.g. "mp4v", "avc1", "XVID"
-        std::string fourcc = "mp4v";
-    };
+    using Options = VideoWriterOptions;
 
     VideoWriter(const std::string& output_path, const Options& opts = Options{});
     ~VideoWriter();

@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <chrono>
 #include <iomanip>
+#include <system_error>
 
 // ─── CLI Argument Parsing ────────────────────────────────────────────────────
 
@@ -17,6 +18,7 @@ struct Config {
 
     // ASCII options
     int    cols          = 120;
+    bool   cols_max      = false;
     double font_scale    = 0.4;
     bool   use_color     = true;
     bool   invert        = false;
@@ -43,6 +45,7 @@ void printUsage(const char* prog) {
         "\n"
         "ASCII options:\n"
         "  --cols <n>         Character columns in ASCII grid (default: 120)\n"
+        "  --cols-max         Auto-pick maximum codec-safe output columns\n"
         "  --font-scale <f>   Font scale for rendering (default: 0.4)\n"
         "  --no-color         Render in white-on-black instead of source colors\n"
         "  --invert           Invert luminance mapping (dark chars on light bg)\n"
@@ -61,6 +64,7 @@ void printUsage(const char* prog) {
         "\n"
         "Examples:\n"
         "  " << prog << " -i input.mp4 -o ascii_out.mp4\n"
+        "  " << prog << " -i input.mp4 -o out.mp4 --cols-max\n"
         "  " << prog << " -i input.mp4 -o out.mp4 --cols 80 --no-color --invert\n"
         "  " << prog << " -i input.mp4 -o out.mp4 --max-frames 100 -v\n";
 }
@@ -91,6 +95,8 @@ Config parseArgs(int argc, char** argv) {
             cfg.output_path = nextArg();
         } else if (arg == "--cols") {
             cfg.cols = std::stoi(nextArg());
+        } else if (arg == "--cols-max") {
+            cfg.cols_max = true;
         } else if (arg == "--font-scale") {
             cfg.font_scale = std::stod(nextArg());
         } else if (arg == "--no-color") {
@@ -124,6 +130,71 @@ Config parseArgs(int argc, char** argv) {
 
     return cfg;
 }
+
+namespace {
+bool canOpenVideoWriter(const VideoWriter::Options& wr_opts, int width, int height) {
+    if (wr_opts.fourcc.size() != 4 || width <= 0 || height <= 0) return false;
+
+    const int fourcc = cv::VideoWriter::fourcc(
+        wr_opts.fourcc[0], wr_opts.fourcc[1], wr_opts.fourcc[2], wr_opts.fourcc[3]
+    );
+    const auto probe_path = (std::filesystem::temp_directory_path() /
+                            ("asciiify_probe_" +
+                             std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) +
+                             ".mp4")).string();
+
+    cv::VideoWriter probe;
+    const bool opened = probe.open(probe_path, fourcc, wr_opts.fps, cv::Size(width, height), true);
+    if (opened) probe.release();
+
+    std::error_code ec;
+    std::filesystem::remove(probe_path, ec);
+    return opened;
+}
+
+bool renderableWithCols(const Frame& sample, const AsciiConverter::Options& asc_template,
+                        const VideoWriter::Options& wr_opts, int cols) {
+    try {
+        AsciiConverter::Options opts = asc_template;
+        opts.cols = cols;
+        AsciiConverter converter(opts);
+        AsciiFrame ascii = converter.convert(sample);
+
+        const int out_w = (wr_opts.width  > 0) ? wr_opts.width  : ascii.rendered.cols;
+        const int out_h = (wr_opts.height > 0) ? wr_opts.height : ascii.rendered.rows;
+        return canOpenVideoWriter(wr_opts, out_w, out_h);
+    } catch (...) {
+        return false;
+    }
+}
+
+int findMaxCodecSafeCols(const Frame& sample, const AsciiConverter::Options& asc_template,
+                         const VideoWriter::Options& wr_opts) {
+    constexpr int kMaxProbeCols = 12000;
+
+    if (!renderableWithCols(sample, asc_template, wr_opts, 1)) {
+        throw std::runtime_error("Could not initialize output writer even at 1 column");
+    }
+
+    int lo = 1;
+    int hi = 2;
+    while (hi <= kMaxProbeCols && renderableWithCols(sample, asc_template, wr_opts, hi)) {
+        lo = hi;
+        hi *= 2;
+    }
+    hi = std::min(hi, kMaxProbeCols);
+
+    while (lo < hi) {
+        const int mid = lo + (hi - lo + 1) / 2;
+        if (renderableWithCols(sample, asc_template, wr_opts, mid)) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return lo;
+}
+} // namespace
 
 // ─── Progress Bar ────────────────────────────────────────────────────────────
 
@@ -177,8 +248,6 @@ int main(int argc, char** argv) {
         asc_opts.invert         = cfg.invert;
         if (!cfg.char_ramp.empty()) asc_opts.char_ramp = cfg.char_ramp;
 
-        AsciiConverter converter(asc_opts);
-
         // ── Build writer ────────────────────────────────────────────────────
         VideoWriter::Options wr_opts;
         wr_opts.fps    = cfg.fps_override > 0 ? cfg.fps_override : info.fps;
@@ -186,10 +255,35 @@ int main(int argc, char** argv) {
         wr_opts.width  = cfg.width;
         wr_opts.height = cfg.height;
 
+        if (cfg.cols_max && (cfg.width > 0 || cfg.height > 0)) {
+            throw std::invalid_argument("--cols-max cannot be combined with --width/--height");
+        }
+
+        if (cfg.cols_max) {
+            Frame sample;
+            bool got_sample = false;
+            reader.forEachFrame([&](Frame&& frame) -> bool {
+                sample = std::move(frame);
+                got_sample = true;
+                return false;
+            });
+            if (!got_sample || sample.image.empty()) {
+                throw std::runtime_error("Failed to read a sample frame for --cols-max");
+            }
+
+            std::cout << "[*] Probing maximum codec-safe columns...\n";
+            const int max_cols = findMaxCodecSafeCols(sample, asc_opts, wr_opts);
+            cfg.cols = max_cols;
+            asc_opts.cols = max_cols;
+            std::cout << "    Selected cols: " << max_cols << "\n\n";
+        }
+
         std::cout << "[*] Output: " << cfg.output_path << "\n"
                   << "    FPS    : " << wr_opts.fps << "\n"
-                  << "    Codec  : " << wr_opts.fourcc << "\n\n";
+                  << "    Codec  : " << wr_opts.fourcc << "\n"
+                  << "    Cols   : " << cfg.cols << "\n\n";
 
+        AsciiConverter converter(asc_opts);
         VideoWriter writer(cfg.output_path, wr_opts);
 
         // ── Process frames ──────────────────────────────────────────────────
