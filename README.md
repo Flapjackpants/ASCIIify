@@ -1,6 +1,7 @@
-# video_ascii
+# ASCIIify
 
 A C++ command-line tool that converts every frame of a video into ASCII art and recomposes them into a new video file.
+<img width="1412" height="1000" alt="image" src="https://github.com/user-attachments/assets/50911fc1-f60e-4c14-b455-bac09baf92ac" />
 
 ## Architecture
 
