@@ -18,6 +18,7 @@ struct Config {
 
     // ASCII options
     int    cols          = 120;
+    int    rows          = 0; // 0 = auto
     bool   cols_max      = false;
     double font_scale    = 0.4;
     bool   use_color     = true;
@@ -49,6 +50,7 @@ void printUsage(const char* prog) {
         "\n"
         "ASCII options:\n"
         "  --cols <n>         Character columns in ASCII grid (default: 120)\n"
+        "  --rows <n>         Character rows (default: auto from aspect ratio)\n"
         "  --cols-max         Auto-pick maximum codec-safe output columns\n"
         "  --font-scale <f>   Font scale for rendering (default: 0.4)\n"
         "  --no-color         Render in white-on-black instead of source colors\n"
@@ -103,6 +105,11 @@ Config parseArgs(int argc, char** argv) {
             cfg.output_path = nextArg();
         } else if (arg == "--cols") {
             cfg.cols = std::stoi(nextArg());
+        } else if (arg == "--rows") {
+            cfg.rows = std::stoi(nextArg());
+            if (cfg.rows < 0) {
+                throw std::invalid_argument("--rows must be >= 0");
+            }
         } else if (arg == "--cols-max") {
             cfg.cols_max = true;
         } else if (arg == "--font-scale") {
@@ -259,6 +266,7 @@ int main(int argc, char** argv) {
         // ── Build converter ─────────────────────────────────────────────────
         AsciiConverter::Options asc_opts;
         asc_opts.cols           = cfg.cols;
+        asc_opts.rows           = cfg.rows;
         asc_opts.font_scale     = cfg.font_scale;
         asc_opts.use_color      = cfg.use_color;
         asc_opts.invert         = cfg.invert;

@@ -5,12 +5,19 @@ A C++ command-line tool that converts every frame of a video into ASCII art and 
 ## Architecture
 
 ```
-video_ascii/
+ASCIIify/
+├── core/                 # OpenCV-free ASCII conversion library
+│   ├── ascii_core.*      # Main convert logic
+│   ├── glyph_atlas.*     # stb_truetype glyph rendering
+│   └── image_ops.*       # Color ops, sampling, resize
+├── ofx/                  # DaVinci Resolve OpenFX plugin
+│   └── ASCIIifyPlugin.*
 ├── main.cpp              # CLI entry point & argument parsing
 ├── frame.hpp             # Shared Frame / AsciiFrame data structures
 ├── video_reader.hpp/cpp  # OpenCV-based frame extraction
-├── ascii_converter.hpp/cpp  # Frame → ASCII art rendering
+├── ascii_converter.hpp/cpp  # OpenCV adapter over core/
 ├── video_writer.hpp/cpp  # ASCII frames → output video
+├── resources/            # Bundled monospace font for core/OFX
 └── CMakeLists.txt
 ```
 
@@ -72,6 +79,18 @@ cmake --build . -j$(sysctl -n hw.logicalcpu)
 
 Binary will be at `build/video_ascii`.
 
+The OpenFX plugin bundle is at `build/ASCIIify.ofx.bundle` when `BUILD_OFX=ON` (default).
+
+Requires DaVinci Resolve’s OpenFX SDK (default location):
+
+`/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/OpenFX`
+
+If your SDK is elsewhere, pass it at configure time:
+
+```bash
+cmake .. -DOFX_SDK_DIR="/path/to/OpenFX"
+```
+
 ## Usage
 
 ```
@@ -83,6 +102,7 @@ Required:
 
 ASCII options:
   --cols <n>         Character columns in ASCII grid (default: 120)
+  --rows <n>         Character rows (default: auto from aspect ratio; 0 = auto)
   --cols-max         Auto-pick maximum codec-safe output columns
   --font-scale <f>   Font scale for rendering (default: 0.4)
   --no-color         Render in white-on-black instead of source colors
@@ -133,7 +153,60 @@ Misc:
 
 # Force 1280x720 output, preserve source FPS
 ./video_ascii -i input.mp4 -o out.mp4 --width 1280 --height 720
+
+# Explicit row count (instead of auto-derived)
+./video_ascii -i input.mp4 -o out.mp4 --cols 80 --rows 40
 ```
+
+## DaVinci Resolve (OpenFX)
+
+The **OpenFX SDK** (headers used at build time) is separate from the **plugins directory** (where Resolve loads `.ofx.bundle` files at runtime).
+
+Install the plugin:
+
+```bash
+./scripts/install_ofx.sh
+```
+
+With a custom SDK path and/or install destination:
+
+```bash
+# Custom SDK path
+./scripts/install_ofx.sh "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/OpenFX"
+
+# User-local plugins dir (no sudo)
+./scripts/install_ofx.sh --dest "$HOME/Library/OFX/Plugins"
+
+# Both
+./scripts/install_ofx.sh "/path/to/OpenFX" --dest "$HOME/Library/OFX/Plugins"
+```
+
+Run `./scripts/install_ofx.sh --help` for full usage.
+
+Or manually:
+
+```bash
+sudo mkdir -p /Library/OFX/Plugins
+sudo cp -R build/ASCIIify.ofx.bundle /Library/OFX/Plugins/
+sudo xattr -cr /Library/OFX/Plugins/ASCIIify.ofx.bundle
+```
+
+Then in Resolve:
+
+1. **DaVinci Resolve → Preferences → Video Plugins** — enable **ASCIIify**
+2. Restart Resolve
+3. On the **Edit** or **Color** page, open **FX → OpenFX** and add **ASCIIify** to a clip
+4. Adjust settings in the **Inspector** (Columns, Auto Rows, Rows, Font Scale, color controls, character ramp)
+
+Inspector controls map to the CLI flags above. **Auto Rows** (default on) matches CLI behavior when `--rows` is omitted.
+
+If macOS blocks the plugin, allow it under **System Settings → Privacy & Security**.
+
+### Troubleshooting install
+
+If you see `cp: /Library/OFX/Plugins/...: No such file or directory`, the plugins folder does not exist yet. The install script creates it automatically; for manual installs run `sudo mkdir -p /Library/OFX/Plugins` first.
+
+For a user-local install, use `--dest "$HOME/Library/OFX/Plugins"`. Resolve scans `/Library/OFX/Plugins` by default; user-local paths may also work depending on your Resolve/OFX configuration.
 
 ## How the ASCII Conversion Works
 

@@ -1,2 +1,5 @@
 build
 .DS_store
+test_input.mp4
+test_output.mp4
+test_rows.mp4
